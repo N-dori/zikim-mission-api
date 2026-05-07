@@ -21,6 +21,25 @@ router.post('/exists', async (req, res) => {
   }
 })
 
+// POST /users/login  -> { user } (without password hash) | 401
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {}
+    if (!email || !password) return res.status(400).json({ message: 'email and password required' })
+    const { data, error } = await supabase.from('users').select('*').eq('email', email).limit(1)
+    if (error) throw error
+    const user = data && data.length ? data[0] : null
+    if (!user) return res.status(401).json({ message: 'invalid credentials' })
+    const ok = await bcrypt.compare(password, user.password)
+    if (!ok) return res.status(401).json({ message: 'invalid credentials' })
+    const { password: _pw, ...safeUser } = user
+    return res.status(200).json({ user: safeUser })
+  } catch (err) {
+    console.log('login failed', err)
+    return res.status(500).json({ message: 'login failed' })
+  }
+})
+
 // POST /users/register  -> { message, user }
 router.post('/register', async (req, res) => {
   try {
