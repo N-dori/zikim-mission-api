@@ -1,3 +1,4 @@
+// @ts-nocheck
 const { verifyJwt } = require('../middleware/auth')
 
 // Optional: when AUTH_SOCKET=false (e.g. early local dev), the handshake check

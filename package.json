@@ -5,8 +5,8 @@
   "description": "Express + Socket.IO backend for the zikim-mission group trivia app.",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon server.js",
-    "start": "node server.js"
+    "dev": "tsx watch server.js",
+    "start": "tsx server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
@@ -18,7 +18,13 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
-    "nodemon": "^3.1.7"
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.17",
+    "nodemon": "^3.1.7",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18"
