@@ -2,6 +2,11 @@ const express = require('express')
 
 const router = express.Router()
 
+const WIKI_HEADERS = {
+  'User-Agent': 'zikim-mission/1.0 (https://github.com/N-dori/zikim-mission-api)',
+  'Accept': 'application/json',
+}
+
 // POST /wiki  -> { data }
 // Wikipedia article extract proxy.
 router.post('/', async (req, res) => {
@@ -9,7 +14,7 @@ router.post('/', async (req, res) => {
     const { txt } = req.body || {}
     if (!txt) return res.status(400).json({ message: 'txt required' })
     const url = `https://he.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(txt)}&prop=extracts&format=json&exintro=1`
-    const wiki = await fetch(url)
+    const wiki = await fetch(url, { headers: WIKI_HEADERS })
     const data = await wiki.json()
     return res.json({ data })
   } catch (err) {
@@ -25,7 +30,7 @@ router.post('/link', async (req, res) => {
     const { txt } = req.body || {}
     if (!txt) return res.status(400).json({ message: 'txt required' })
     const url = `https://he.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(txt)}&limit=1&format=json`
-    const wiki = await fetch(url)
+    const wiki = await fetch(url, { headers: WIKI_HEADERS })
     const data = await wiki.json()
     return res.json({ data })
   } catch (err) {
