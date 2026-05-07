@@ -7,7 +7,7 @@
   "scripts": {
     "build": "npm install",
     "dev": "tsx watch server.js",
-    "start": "tsx server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
