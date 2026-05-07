@@ -1,9 +1,8 @@
-import { jwtVerify } from 'jose'
-import type { Request, Response, NextFunction } from 'express'
+const { jwtVerify } = require('jose')
 
-let cachedSecretKey: Uint8Array | null = null
+let cachedSecretKey = null
 
-function secretKey(): Uint8Array {
+function secretKey() {
   if (cachedSecretKey) return cachedSecretKey
   const raw = process.env.JWT_SECRET
   if (!raw) throw new Error('JWT_SECRET must be set')
@@ -11,21 +10,23 @@ function secretKey(): Uint8Array {
   return cachedSecretKey
 }
 
-export async function verifyJwt(token: string): Promise<Record<string, unknown>> {
+async function verifyJwt(token) {
   const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] })
-  return payload as Record<string, unknown>
+  return payload
 }
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+async function requireAuth(req, res, next) {
   try {
     const auth = req.headers.authorization
     if (!auth || !auth.startsWith('Bearer ')) {
       res.status(401).json({ message: 'Not authorized' })
       return
     }
-    ;(req as Request & { user: unknown }).user = await verifyJwt(auth.slice(7))
+    req.user = await verifyJwt(auth.slice(7))
     next()
   } catch {
     res.status(401).json({ message: 'Not authorized' })
   }
 }
+
+module.exports = { verifyJwt, requireAuth }
