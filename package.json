@@ -5,6 +5,7 @@
   "description": "Express + Socket.IO backend for the zikim-mission group trivia app.",
   "main": "server.js",
   "scripts": {
+    "build": "npm install",
     "dev": "tsx watch server.js",
     "start": "tsx server.js"
   },
