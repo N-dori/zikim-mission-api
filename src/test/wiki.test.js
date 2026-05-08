@@ -1,4 +1,7 @@
 const request = require('supertest')
+// Ensure tests that import the app don't fail requiring supabase when CI has no secrets
+process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost'
+process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test'
 const { app } = require('../../server')
 
 describe('POST /wiki', () => {
