@@ -115,7 +115,7 @@ describe('End-to-end auth and protected routes', () => {
     app.use('/users', usersRouter)
 
     res = await request(app).put('/users/progress').send({ email: 'yes@one.com', articel: 'early History', scrollProcentage: 50 })
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
     expect(res.body.user).toBeDefined()
   })
 })

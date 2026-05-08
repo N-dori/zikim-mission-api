@@ -1,4 +1,4 @@
-const { jwtVerify } = require('jose')
+const { jwtVerify, SignJWT } = require('jose')
 
 let cachedSecretKey = null
 
@@ -31,3 +31,13 @@ async function requireAuth(req, res, next) {
 }
 
 module.exports = { verifyJwt, requireAuth }
+async function signJwt(payload, expires = '1h') {
+  const token = await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(expires)
+    .sign(secretKey())
+  return token
+}
+
+module.exports = { verifyJwt, requireAuth, signJwt }

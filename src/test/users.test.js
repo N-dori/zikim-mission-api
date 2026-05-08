@@ -30,8 +30,8 @@ describe('users routes (expanded)', () => {
     app.use('/users', usersRouter)
 
     const res = await request(app).post('/users/exists').send({ email: 'a@b.com' })
-    expect(res.status).toBe(201)
-    expect(res.body.user).toEqual(user)
+    expect(res.status).toBe(200)
+    expect(res.body.exists).toBe(true)
   })
 
   test('POST /users/exists returns user:null when not found', async () => {
@@ -43,8 +43,8 @@ describe('users routes (expanded)', () => {
     app.use('/users', usersRouter)
 
     const res = await request(app).post('/users/exists').send({ email: 'not@found.com' })
-    expect(res.status).toBe(201)
-    expect(res.body.user).toBeNull()
+    expect(res.status).toBe(200)
+    expect(res.body.exists).toBe(false)
   })
 
   test('POST /users/exists returns 500 on db error', async () => {
@@ -240,7 +240,7 @@ describe('users routes (expanded)', () => {
       app.use('/users', usersRouter)
 
       const res = await request(app).put('/users/progress').send({ email: 'u@u.com', articel: 'early History', scrollProcentage: 77 })
-      expect(res.status).toBe(201)
+      expect(res.status).toBe(200)
       // assert the update payload targeted early history field
       expect(mock.captured.updateArgs).toBeDefined()
       expect(Object.prototype.hasOwnProperty.call(mock.captured.updateArgs, 'is_early_history_completed')).toBe(true)
@@ -256,7 +256,7 @@ describe('users routes (expanded)', () => {
       app.use('/users', usersRouter)
 
       const res = await request(app).put('/users/progress').send({ email: 'v@v.com', articel: 'something else', scrollProcentage: 33 })
-      expect(res.status).toBe(201)
+      expect(res.status).toBe(200)
       expect(mock.captured.updateArgs).toBeDefined()
       expect(Object.prototype.hasOwnProperty.call(mock.captured.updateArgs, 'is_otef_aza_completed')).toBe(true)
     })
