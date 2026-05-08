@@ -4,8 +4,8 @@ let cachedSecretKey = null
 
 function secretKey() {
   if (cachedSecretKey) return cachedSecretKey
-  const raw = process.env.JWT_SECRET
-  if (!raw) throw new Error('JWT_SECRET must be set')
+  const raw = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET
+  if (!raw) throw new Error('JWT_SECRET or NEXTAUTH_SECRET must be set')
   cachedSecretKey = new TextEncoder().encode(raw)
   return cachedSecretKey
 }
@@ -24,7 +24,8 @@ async function requireAuth(req, res, next) {
     }
     req.user = await verifyJwt(auth.slice(7))
     next()
-  } catch {
+  } catch (err) {
+    console.error('JWT verification failed:', err && err.message ? err.message : err)
     res.status(401).json({ message: 'Not authorized' })
   }
 }
