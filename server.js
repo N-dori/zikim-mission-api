@@ -47,9 +47,11 @@ const io = new Server(httpServer, {
 registerSocketHandlers(io)
 
 const port = Number(process.env.PORT) || 4000
-httpServer.listen(port, () => {
-  console.log(`> API listening on http://localhost:${port}`)
-  console.log(`> CORS allowed origins: ${allowedOrigins.join(', ')}`)
-})
+if (require.main === module) {
+  httpServer.listen(port, () => {
+    console.log(`> API listening on http://localhost:${port}`)
+    console.log(`> CORS allowed origins: ${allowedOrigins.join(', ')}`)
+  })
+}
 
 module.exports = { app, io, httpServer }
