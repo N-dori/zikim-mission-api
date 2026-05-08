@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_ENV: development
+      NPM_CONFIG_PRODUCTION: 'false'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,8 +22,11 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install dependencies (include dev deps)
-        run: npm ci --include=dev
+      - name: Install dependencies
+        run: |
+          npm ci
+          # ensure devDependencies (like ws) are available for Node 20
+          npm install --no-audit --no-fund --include=dev
 
       - name: Run tests
         run: npm test
