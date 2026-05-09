@@ -1,8 +1,18 @@
 const express = require('express')
 const supabase = require('../db/supabase')
 const { requireAuth } = require('../middleware/auth')
+const { questions, QUESTIONS_VERSION } = require('../assets/Questions')
 
 const router = express.Router()
+
+// GET /trivia/questions  -> { questions, version, count }
+router.get('/questions', requireAuth, (_req, res) => {
+  return res.status(200).json({
+    questions,
+    version: QUESTIONS_VERSION,
+    count: questions.length,
+  })
+})
 
 // POST /trivia/createRoom  -> { newRoom }
 router.post('/createRoom', requireAuth, async (req, res) => {
@@ -29,11 +39,11 @@ router.put('/addPlayer', requireAuth, async (req, res) => {
     if (!roomId || !player) {
       return res.status(400).json({ message: 'Missing roomId or player' })
     }
+    // Admin assignment is server-side (socket joinRoom). Ignore any client-supplied isAdmin.
     const newPlayer = {
       name: player.name,
       nickName: player.nickName,
       img: player.img,
-      isAdmin: player.isAdmin,
       answers: [],
     }
 
@@ -64,7 +74,7 @@ router.put('/addPlayer', requireAuth, async (req, res) => {
 
 // POST /trivia/getRoom  -> { room }
 // Looks up by NAME (legacy endpoint name was getRoomById but it queries by name).
-router.post('/getRoom', async (req, res) => {
+router.post('/getRoom', requireAuth, async (req, res) => {
   try {
     const { name } = req.body || {}
     if (!name) return res.status(400).json({ message: 'name required' })
@@ -75,7 +85,7 @@ router.post('/getRoom', async (req, res) => {
       .limit(1)
     if (error) throw error
     const room = data && data.length ? data[0] : null
-    return res.status(201).json({ room })
+    return res.status(200).json({ room })
   } catch (err) {
     console.log('had a problem finding room', err)
     return res.status(500).json({ message: 'had a problem finding room' })
@@ -83,7 +93,7 @@ router.post('/getRoom', async (req, res) => {
 })
 
 // POST /trivia/getParticipants  -> { room }
-router.post('/getParticipants', async (req, res) => {
+router.post('/getParticipants', requireAuth, async (req, res) => {
   try {
     const { id } = req.body || {}
     if (!id) return res.status(400).json({ message: 'id required' })

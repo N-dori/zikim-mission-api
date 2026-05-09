@@ -1,80 +1,210 @@
-// @ts-nocheck
 const { verifyJwt } = require('../middleware/auth')
+const {
+  createRoom,
+  reduceJoin,
+  reduceLeave,
+  reduceStartGame,
+  reduceSubmit,
+  reduceTimeout,
+  reduceNextQuestion,
+  snapshot,
+} = require('./state')
+const { sanitizeNickName, sanitizeImgUrl } = require('./sanitize')
+const { questions } = require('../assets/Questions')
 
-// Optional: when AUTH_SOCKET=false (e.g. early local dev), the handshake check
-// is skipped so you can iterate on the frontend without wiring tokens.
-const AUTH_REQUIRED = process.env.AUTH_SOCKET !== 'false'
+const QUESTIONS_COUNT = questions.length
+const ROUND_MS = Number(process.env.ROUND_MS) || 30_000
+const GRACE_MS = 250
+const ROOM_REAPER_MS = 60_000
+
+// roomId -> { state, timerHandle, reaperHandle, sockets: Map<userId, socket> }
+const rooms = new Map()
+
+function getOrCreateRoom(roomId) {
+  let meta = rooms.get(roomId)
+  if (meta) return meta
+  meta = {
+    state: createRoom({ questionsCount: QUESTIONS_COUNT, now: Date.now() }),
+    timerHandle: null,
+    reaperHandle: null,
+    sockets: new Map(),
+  }
+  rooms.set(roomId, meta)
+  return meta
+}
+
+function destroyRoom(roomId) {
+  const meta = rooms.get(roomId)
+  if (!meta) return
+  if (meta.timerHandle) clearTimeout(meta.timerHandle)
+  if (meta.reaperHandle) clearTimeout(meta.reaperHandle)
+  rooms.delete(roomId)
+}
+
+function applyEffects(io, roomId, effects, meta) {
+  for (const e of effects) {
+    if (e.type === 'broadcast') {
+      io.to(roomId).emit(e.event, e.payload)
+    } else if (e.type === 'clearTimer') {
+      if (meta.timerHandle) {
+        clearTimeout(meta.timerHandle)
+        meta.timerHandle = null
+      }
+    } else if (e.type === 'startTimer') {
+      if (meta.timerHandle) clearTimeout(meta.timerHandle)
+      meta.timerHandle = setTimeout(() => {
+        // The room may have been reaped while the timer was queued.
+        if (rooms.get(roomId) !== meta) return
+        meta.timerHandle = null
+        const { state, effects: outEffects } = reduceTimeout(meta.state)
+        meta.state = state
+        applyEffects(io, roomId, outEffects, meta)
+      }, e.ms)
+    }
+  }
+}
+
+function scheduleReaperIfEmpty(roomId, meta) {
+  const anyConnected = Object.values(meta.state.players).some((p) => p.connected)
+  if (anyConnected) return
+  if (meta.reaperHandle) clearTimeout(meta.reaperHandle)
+  meta.reaperHandle = setTimeout(() => {
+    if (rooms.get(roomId) !== meta) return
+    const stillEmpty = Object.values(meta.state.players).every((p) => !p.connected)
+    if (stillEmpty) destroyRoom(roomId)
+  }, ROOM_REAPER_MS)
+}
+
+function cancelReaper(meta) {
+  if (meta.reaperHandle) {
+    clearTimeout(meta.reaperHandle)
+    meta.reaperHandle = null
+  }
+}
 
 module.exports = function registerSocketHandlers(io) {
-  if (AUTH_REQUIRED) {
-    io.use(async (socket, next) => {
-      try {
-        const token = socket.handshake.auth && socket.handshake.auth.token
-        if (!token) return next(new Error('No auth token'))
-        socket.data.user = await verifyJwt(token)
-        next()
-      } catch (err) {
-        next(new Error('Bad auth token'))
-      }
-    })
-  }
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth && socket.handshake.auth.token
+      if (!token) return next(new Error('No auth token'))
+      const user = await verifyJwt(token)
+      if (!user || !user.id) return next(new Error('Invalid token payload'))
+      socket.data.user = user
+      next()
+    } catch (err) {
+      next(new Error('Bad auth token'))
+    }
+  })
 
   io.on('connection', (socket) => {
-    console.log(`Socket ${socket.id} connected${socket.data.user ? ` as ${socket.data.user.email}` : ''}.`)
+    const userId = socket.data.user.id
 
-    socket.on('joinRoom', ({ roomId } = {}) => {
-      if (!roomId) return
-      if (socket.data.roomId && socket.data.roomId !== roomId) {
-        socket.leave(socket.data.roomId)
+    socket.on('joinRoom', ({ roomId, nickName, img } = {}) => {
+      if (!roomId || typeof roomId !== 'string') return
+      const cleanNick = sanitizeNickName(nickName) || 'Player'
+      const cleanImg = sanitizeImgUrl(img)
+
+      const meta = getOrCreateRoom(roomId)
+
+      // Single session per user: disconnect any older socket for this user.
+      const prior = meta.sockets.get(userId)
+      if (prior && prior.id !== socket.id) {
+        try { prior.disconnect(true) } catch (_) { /* ignore */ }
       }
+      meta.sockets.set(userId, socket)
+      cancelReaper(meta)
+
       socket.data.roomId = roomId
       socket.join(roomId)
-      console.log(`Socket ${socket.id} joined room ${roomId}`)
+
+      const now = Date.now()
+      const result = reduceJoin(meta.state, {
+        playerId: userId,
+        nickName: cleanNick,
+        img: cleanImg,
+        now,
+      })
+      meta.state = result.state
+      applyEffects(io, roomId, result.effects, meta)
+
+      socket.emit('syncState', snapshot(meta.state, { now: Date.now() }))
     })
 
-    const roomOf = (payloadRoomId) => payloadRoomId || socket.data.roomId
-
-    socket.on('playerAdded', ({ player, roomId } = {}) => {
-      const room = roomOf(roomId)
-      if (!room) return
-      console.log(`Player added in room ${room}:`, player)
-      io.to(room).emit('playerAdded', { player })
+    socket.on('startGame', () => {
+      const roomId = socket.data.roomId
+      if (!roomId) return
+      const meta = rooms.get(roomId)
+      if (!meta) return
+      const result = reduceStartGame(meta.state, {
+        playerId: userId,
+        now: Date.now(),
+        roundMs: ROUND_MS,
+      })
+      meta.state = result.state
+      applyEffects(io, roomId, result.effects, meta)
     })
 
-    socket.on('allHere', ({ roomId } = {}) => {
-      const room = roomOf(roomId)
-      if (!room) return
-      console.log(`All here event received for room ${room}`)
-      io.to(room).emit('allHere')
+    socket.on('submitAnswer', (payload = {}) => {
+      const roomId = socket.data.roomId
+      if (!roomId) return
+      const meta = rooms.get(roomId)
+      if (!meta) return
+      const { qIndex, score, time, optionId } = payload
+      const result = reduceSubmit(meta.state, {
+        playerId: userId,
+        qIndex,
+        score,
+        time,
+        optionId,
+        now: Date.now(),
+        roundMs: ROUND_MS,
+        graceMs: GRACE_MS,
+      })
+      meta.state = result.state
+      applyEffects(io, roomId, result.effects, meta)
     })
 
-    socket.on('addPlayerScore', (newScore) => {
-      const room = roomOf(newScore && newScore.roomId)
-      if (!room) return
-      console.log(`adding score of player in room ${room}:`, newScore)
-      io.to(room).emit('addPlayerScore', newScore)
+    socket.on('nextQuestion', () => {
+      const roomId = socket.data.roomId
+      if (!roomId) return
+      const meta = rooms.get(roomId)
+      if (!meta) return
+      const result = reduceNextQuestion(meta.state, {
+        playerId: userId,
+        now: Date.now(),
+        roundMs: ROUND_MS,
+      })
+      meta.state = result.state
+      applyEffects(io, roomId, result.effects, meta)
     })
 
-    socket.on('next question', (payload = {}) => {
-      const room = roomOf(payload && payload.roomId)
-      if (!room) return
-      console.log(`next question in room ${room}`)
-      io.to(room).emit('next question')
+    socket.on('syncRequest', () => {
+      const roomId = socket.data.roomId
+      if (!roomId) return
+      const meta = rooms.get(roomId)
+      if (!meta) return
+      socket.emit('syncState', snapshot(meta.state, { now: Date.now() }))
     })
 
-    socket.on('setFinalResultes', (newScoreSummery) => {
-      const room = roomOf(newScoreSummery && newScoreSummery.roomId)
-      if (!room) return
-      console.log(`final score results in room ${room}:`, newScoreSummery)
-      io.to(room).emit('setFinalResultes', newScoreSummery)
-    })
+    socket.on('disconnect', () => {
+      const roomId = socket.data.roomId
+      if (!roomId) return
+      const meta = rooms.get(roomId)
+      if (!meta) return
+      // Only act if this socket is still the registered one for this user;
+      // a single-session swap will have already replaced us.
+      if (meta.sockets.get(userId) !== socket) return
+      meta.sockets.delete(userId)
 
-    socket.on('disconnect', (reason) => {
-      console.log(`Socket ${socket.id} disconnected. Reason: ${reason}`)
-    })
+      const result = reduceLeave(meta.state, { playerId: userId })
+      meta.state = result.state
+      applyEffects(io, roomId, result.effects, meta)
 
-    socket.on('error', (error) => {
-      console.error(`Socket error: ${error}`)
+      scheduleReaperIfEmpty(roomId, meta)
     })
   })
 }
+
+// Exposed for tests.
+module.exports.__rooms = rooms
+module.exports.__destroyRoom = destroyRoom

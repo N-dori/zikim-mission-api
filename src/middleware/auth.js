@@ -30,7 +30,6 @@ async function requireAuth(req, res, next) {
   }
 }
 
-module.exports = { verifyJwt, requireAuth }
 async function signJwt(payload, expires = '1h') {
   const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })

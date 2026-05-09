@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/dev/8130/zikim_mission/zikim-mission/src/**)",
+      "Bash(xargs grep -l \"QUESTIONS_COUNT\\\\|Tanswer\\\\|event.*name\")",
+      "Read(//c/dev/8130/zikim_mission/zikim-mission/src/app/179trivia/group/[roomId]/**)"
+    ]
+  }
+}
