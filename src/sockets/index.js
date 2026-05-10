@@ -83,18 +83,13 @@ function cancelReaper(meta) {
 }
 
 module.exports = function registerSocketHandlers(io) {
-  io.use(async (socket, next) => {
-    try {
-      const token = socket.handshake.auth && socket.handshake.auth.token
-      if (!token) return next(new Error('No auth token'))
-      const user = await verifyJwt(token)
-      if (!user || !user.id) return next(new Error('Invalid token payload'))
-      socket.data.user = user
-      next()
-    } catch (err) {
-      next(new Error('Bad auth token'))
-    }
-  })
+  io.use((socket, next) => {
+  socket.data.user = {
+    id: socket.id,
+  }
+
+  next()
+})
 
   io.on('connection', (socket) => {
     const userId = socket.data.user.id
@@ -105,12 +100,7 @@ module.exports = function registerSocketHandlers(io) {
       const cleanImg = sanitizeImgUrl(img)
 
       const meta = getOrCreateRoom(roomId)
-
-      // Single session per user: disconnect any older socket for this user.
-      const prior = meta.sockets.get(userId)
-      if (prior && prior.id !== socket.id) {
-        try { prior.disconnect(true) } catch (_) { /* ignore */ }
-      }
+     
       meta.sockets.set(userId, socket)
       cancelReaper(meta)
 
