@@ -20,11 +20,15 @@ const ROOM_REAPER_MS = 60_000
 // roomId -> { state, timerHandle, reaperHandle, sockets: Map<userId, socket> }
 const rooms = new Map()
 
-function getOrCreateRoom(roomId) {
+function getOrCreateRoom(roomId, questionsCount) {
   let meta = rooms.get(roomId)
   if (meta) return meta
+  const count =
+    Number.isInteger(questionsCount) && questionsCount > 0 && questionsCount <= 200
+      ? questionsCount
+      : QUESTIONS_COUNT
   meta = {
-    state: createRoom({ questionsCount: QUESTIONS_COUNT, now: Date.now() }),
+    state: createRoom({ questionsCount: count, now: Date.now() }),
     timerHandle: null,
     reaperHandle: null,
     sockets: new Map(),
@@ -94,12 +98,12 @@ module.exports = function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
     const userId = socket.data.user.id
 
-    socket.on('joinRoom', ({ roomId, nickName, img } = {}) => {
+    socket.on('joinRoom', ({ roomId, nickName, img, questionsCount } = {}) => {
       if (!roomId || typeof roomId !== 'string') return
       const cleanNick = sanitizeNickName(nickName) || 'Player'
       const cleanImg = sanitizeImgUrl(img)
 
-      const meta = getOrCreateRoom(roomId)
+      const meta = getOrCreateRoom(roomId, questionsCount)
      
       meta.sockets.set(userId, socket)
       cancelReaper(meta)
